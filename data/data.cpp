@@ -1,59 +1,57 @@
 #include <iostream>
+#include <string>
 #include <cstring>
-#include <ctime>
-#include <cstdlib>
-#include <cstdio>
-#include <arpa/inet.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <unistd.h>
 
-int main()
-{
-    const char* server_address = "172.16.40.1";
-    const int server_port = 13; // порт daytime
+#define MAX_BUFFER_SIZE 1024
 
-// Создаем сокет
-    int client_socket = socket(AF_INET, SOCK_DGRAM, 0);
-    if (client_socket == -1) {
-        perror("Ошибка при создании сокета");
-        exit(EXIT_FAILURE);
+int main() {
+    int sockfd;
+    char buffer[MAX_BUFFER_SIZE];
+    struct sockaddr_in serverAddr;
+
+    // Создание сокета
+    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd < 0) {
+        std::cerr << "Ошибка при создании сокета" << std::endl;
+        return 1;
     }
 
-// Настраиваем адрес сервера
-    sockaddr_in server_addr;
-    std::memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(server_port);
-    if (inet_pton(AF_INET, server_address, &(server_addr.sin_addr)) <= 0) {
-        perror("Ошибка при настройке адреса сервера");
-        close(client_socket);
-        exit(EXIT_FAILURE);
+    // Настройка адреса сервера
+    memset(&serverAddr, 0, sizeof(serverAddr));
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(13); // Порт службы daytime
+    serverAddr.sin_addr.s_addr = inet_addr("172.16.40.1"); // IP-адрес сервера
+
+    // Отправка запроса
+    if (sendto(sockfd, nullptr, 0, 0, (struct sockaddr*)&serverAddr, 
+sizeof(serverAddr)) < 0) {
+        std::cerr << "Ошибка при отправке запроса" << std::endl;
+        return 1;
     }
 
-// Отправляем запрос на сервер
-    if (sendto(client_socket, nullptr, 0, 0, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
-        perror("Ошибка при отправке данных");
-        close(client_socket);
-        exit(EXIT_FAILURE);
+    // Получение ответа
+    ssize_t numBytes = recvfrom(sockfd, buffer, MAX_BUFFER_SIZE - 1, 0, 
+nullptr, nullptr);
+    if (numBytes < 0) {
+        std::cerr << "Ошибка при получении ответа" << std::endl;
+        return 1;
     }
 
-// Получаем ответ от сервера
-    char buffer[1024];
-    socklen_t server_addr_len = sizeof(server_addr);
-    ssize_t bytes_received = recvfrom(client_socket, buffer, sizeof(buffer), 0, (struct sockaddr*)&server_addr, &server_addr_len);
+    // Добавление завершающего нулевого символа
+    buffer[numBytes] = '\0';
 
-    if (bytes_received == -1) {
-        perror("Ошибка при получении данных");
-        close(client_socket);
-        exit(EXIT_FAILURE);
-    }
+    // Вывод ответа на экран
+    std::cout << "Ответ от сервера: " << buffer << std::endl;
 
-// Преобразуем полученные данные в строку времени
-    time_t server_time = ntohl(*reinterpret_cast<time_t*>(buffer));
-    std::cout << "Время на сервере " << server_address << ":" << server_port << ": " << ctime(&server_time);
+    // Закрытие сокета
+    close(sockfd);
 
-// Закрываем сокет
-    close(client_socket);
+    return 0;
+}
 
     return 0;
 }
